@@ -1,6 +1,17 @@
 import numpy
+import streamz
 
 from pyomslpwan.lib.coding import binaryToNrz
+
+
+
+def gaussdesign(bt, span, sps):
+    n = span * sps
+    t_range = (n - 1) / sps / 2
+    t = numpy.linspace(-t_range, t_range, n)
+    delta = numpy.sqrt(numpy.log(2)) / (2 * numpy.pi * bt)
+    h = numpy.exp(-t ** 2 / (2 * delta ** 2)) / (numpy.sqrt(2 * numpy.pi) * delta)
+    return h
 
 
 
@@ -25,6 +36,32 @@ class Correlator:
     
     def clear(self):
         self.buffer[:] = 0
+
+
+
+class StreamzCorrelator:
+
+    def __init__(self, pattern):
+        self.size = len(pattern)
+        self.buffer = None
+        self.pattern = pattern
+        self.pattern_rms = numpy.sqrt((numpy.abs(self.pattern) ** 2).sum())
+    
+    def correlate(self, window):
+        window_squared = numpy.abs(window) ** 2
+        window_rms = numpy.sqrt(window_squared.sum())
+
+        normalized_correlation = (window * self.pattern).sum() / (window_rms * self.pattern_rms)
+
+        return normalized_correlation
+    
+    def correlation(self, stream: streamz.Stream):
+        self.buffer = stream.sliding_window(self.size)
+        new_stream = self.buffer.map(self.correlate)
+        return new_stream
+    
+    def clear(self):
+        self.buffer._buffer.clear()
 
 
 
@@ -132,3 +169,60 @@ class PrecodedMskDemodulator:
         nrz = numpy.real(modulated / phase)
         self.phase = phase[-1]
         return nrz
+
+
+
+class PulseUpsampler:
+
+    def __init__(self, interpolation):
+        self.interpolation = interpolation
+
+    def upsample(self, samples):
+        pulses = numpy.zeros(len(samples) * self.interpolation)
+        pulses[::self.interpolation] = samples
+        return pulses
+
+
+
+class GaussianFilter:
+
+    def __init__(self, bandwidth_time_product, kernel_span, samples_per_symbol):
+        self.upsampler = PulseUpsampler(samples_per_symbol)
+        self.kernel = gaussdesign(bandwidth_time_product, kernel_span, samples_per_symbol)
+        self.state = numpy.zeros(len(self.kernel) - 1)
+    
+    def filter(self, samples, padded=False):
+        upsampled = self.upsampler.upsample(samples)
+        input_with_history = numpy.concatenate([self.state, upsampled])
+        if padded:
+            input_with_history = numpy.concatenate([input_with_history, numpy.zeros_like(self.state)])
+        self.state = input_with_history[:-len(self.kernel)]
+        filtered = numpy.convolve(input_with_history, self.kernel, "valid")
+        return filtered
+
+
+
+class IqFrequencyModulator:
+
+    def __init__(self):
+        self.initial_phase = 0
+
+    def modulate(self, argument):
+        argument = numpy.insert(argument, 0, self.initial_phase)
+        angle = numpy.cumsum(argument) % (2 * numpy.pi)
+        iq = numpy.exp(1j * angle)
+        return iq
+
+
+
+class GmskModulator:
+
+    def __init__(self, bandwidth_time_product, kernel_span, samples_per_symbol):
+        self.filter = GaussianFilter(bandwidth_time_product, kernel_span, samples_per_symbol)
+        self.sensitivity = (numpy.pi / 2) / sum(self.filter.kernel)
+        self.modulator = IqFrequencyModulator()
+    
+    def modulate(self, bits, padded=False):
+        filtered = self.filter.filter(bits, padded) * self.sensitivity
+        modulated = self.modulator.modulate(filtered)
+        return modulated

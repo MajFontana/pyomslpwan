@@ -20,7 +20,9 @@ dependencies = ["matplotlib",
                 "numpy",
                 "bitstring",
                 "pyzmq",
-                "numba"]
+                "numba",
+                "streamz",
+                "RsWaveform"]
 
 [project.urls]
 #Homepage = "https://github.com/pypa/sampleproject"
