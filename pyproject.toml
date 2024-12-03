@@ -18,6 +18,7 @@ requires-python = ">=3.8"
 #]
 dependencies = ["matplotlib",
                 "numpy",
+		            "scipy",
                 "bitstring",
                 "pyzmq",
                 "numba",

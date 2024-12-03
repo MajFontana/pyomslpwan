@@ -1,0 +1,9 @@
+ted_input_clock = (interp_clock % interps_per_ted_input) == 0		# every cycle
+interp_clock = (interp_clock + 1) % interps_per_symbol			# 1
+interps_per_ted_input = interps_per_symbol / ted.inputs_per_symbol	# 1
+interps_per_symbol = lcm(ted.inputs_per_symbol, osps)			# 1
+ted.inputs_per_symbol = 1
+osps = 1
+
+output_sample_clock = interp_clock % interps_per_output_sample		# every cycle
+interps_per_output_sample = interps_per_symbol / osps			# 1

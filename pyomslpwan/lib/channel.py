@@ -215,7 +215,34 @@ class IqFrequencyModulator:
 
 
 
+class IqFrequencyDemodulator:
+
+    def __init__(self):
+        self.previous_sample = 0
+
+    def modulate(self, iq):
+        iq = numpy.insert(iq, 0, self.previous_sample)
+        delta = iq[1:] * iq[:-1].conjugate()
+        angle = numpy.arctan2(delta.real, de)
+        return iq
+
+
+
 class GmskModulator:
+
+    def __init__(self, bandwidth_time_product, kernel_span, samples_per_symbol):
+        self.filter = GaussianFilter(bandwidth_time_product, kernel_span, samples_per_symbol)
+        self.sensitivity = (numpy.pi / 2) / sum(self.filter.kernel)
+        self.modulator = IqFrequencyModulator()
+    
+    def modulate(self, bits, padded=False):
+        filtered = self.filter.filter(bits, padded) * self.sensitivity
+        modulated = self.modulator.modulate(filtered)
+        return modulated
+
+
+
+class FskDemodulator:
 
     def __init__(self, bandwidth_time_product, kernel_span, samples_per_symbol):
         self.filter = GaussianFilter(bandwidth_time_product, kernel_span, samples_per_symbol)
