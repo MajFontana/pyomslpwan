@@ -7,3 +7,150 @@ osps = 1
 
 output_sample_clock = interp_clock % interps_per_output_sample		# every cycle
 interps_per_output_sample = interps_per_symbol / osps			# 1
+
+
+
+sps
+-clock()
+-interp.sync_reset()
+-self.set_relative_rate()
+
+inst_clock_period(sps)
+inst_interp_period = inst_clock_period / interps_per_symbol
+interp.advance_phase(inst_interp_period)
+clock.set_inst_period()
+
+
+
+omega_relative_limit = 0.005
+max_deviation = omega_relative_limit * sps
+
+
+
+clock.max_period = sps + max_deviation
+clock.min_period = sps - max_deviation
+
+interps_per_symbol = 1
+osps = 1
+ni = ninput_items - interp.ntaps # input items to consume
+
+NTAPS = 8
+NSTEPS = 128
+
+taps[NSTEPS + 1][NTAPS]
+
+si(x):
+	if abs(x) < 1e-9:
+		return 1
+	return sin(x) / x
+
+initpt(x, ndim):
+	for i in range(ndim):
+		x[i] = si(math.pi * (i - ndim / 2) + global_mu)
+
+gen_interpolator_taps():
+	x = [[0 for j in range(MAX_NTAPS)] for i in range(MAX_NSTEPS + 1)]
+	step_size = 1 / nsteps
+	for i in range(ntaps):
+		xx[0][i] = 0
+	x[0][ntaps // 2] = 1
+	for j in range(1, nsteps // 2):
+		global_mu = j * step_size
+		initpt(xx[j], ntaps)
+		result = prax2(objective, xx[j], ntaps, xx[j])
+	for j in range(nsteps // 2):
+		for i in range(ntaps):
+			xx[nteps - j][i] = xx[j][ntaps - i - 1]
+
+interpolator init:
+	filters = []
+	for i in range(NSTEPS + 1):
+		t = taps[i]
+		filers.append(t)
+
+vsak cikel:
+	interp_output = interp.interpolate(input=&in[ii], mu=interp.phase_wrapped)
+		imu = round(mu * NSTEPS)
+		if (imu < 0) or (imu > NSTEPS):
+			raise Excpetion()
+		r = filters[imu].filter(input)
+		return r
+	out[oo] = interp_output
+	ted.input(x=interp_output)
+		input.push_front(x)
+		input.pop_back()
+		decision.push_front(slice(input[0]))
+		decision.pop_back()
+		prev_error = error
+		error = self.compute_error_cf()
+			return decision[1] * input[0] - decision[0] * input[1]
+	error = ted.error
+	clock.advance_loop(error=error)
+		prev_avg_period = avg_period
+		prev_inst_period = inst_period
+		prev_phase = phase
+		avg_period = avg_period + beta * error
+		period_limit()
+			avg_period = max(min(avg_period, max_avg_period), min_avg_period)
+		inst_period = avg_period + alpha * error
+		if inst_period <= 0
+			inst_period = avg-period
+		phase = phase + inst_period
+	inst_clock_period = clock.inst_period
+	clock.phase_wrap()
+		period = avg_period
+		limit = period / 2
+		phase = phase % copysign(limit, phase)
+	inst_interp_period = inst_clock_period / interps_per_symbol
+	_, look_ahead_phase_n, _ = interp.next_phase(increment=inst_clock_period)
+		phase = phase_wrapped + increment
+		n = floor(phase)
+		phase_wrapped = phase - n
+		phase_n = int(n)
+		return phase, phase_n, phase_wrapped
+	if ii + look_ahead_phase_n >= ni:
+		clock.revert_loop()
+		ted.revert()
+		self.revert_internal_clocks()
+		break
+	interp.advance_phase(increment=inst_interp_period)
+		prev_phase = phase
+		prev_phase_wrapped = phase_wrapped
+		prev_phase_n = phase_n
+		phase, phase_n, phase_wrapped = self.next_phase(increment=increment)
+	oo++
+	
+	
+	d_clock(loop_bw,
+              sps + max_deviation,
+              sps - max_deviation,
+              sps,
+              damping_factor,
+              ted_gain),
+
+	d_inst_output_period(sps / static_cast<float>(osps)),
+      d_inst_clock_period(sps),
+      d_avg_clock_period(sps),
+      d_sps(sps),
+      d_max_deviation(max_deviation),
+      d_osps(static_cast<float>(osps)),
+      d_osps_n(osps),
+      
+      d_interps_per_symbol_n = std::lcm(d_ted->inputs_per_symbol(), d_osps_n);
+    d_interps_per_ted_input_n = d_interps_per_symbol_n / d_ted->inputs_per_symbol();
+    d_interps_per_output_sample_n = d_interps_per_symbol_n / d_osps_n;
+    
+    d_interps_per_symbol = static_cast<float>(d_interps_per_symbol_n);
+    d_interps_per_ted_input = static_cast<float>(d_interps_per_ted_input_n);
+
+    d_interp_clock = d_interps_per_symbol_n - 1;
+    sync_reset_internal_clocks();
+    d_inst_interp_period = d_inst_clock_period / d_interps_per_symbol;
+
+    check_interps();
+
+    d_ted->sync_reset();
+
+    d_interp->sync_reset(sps);
+    
+    d_filter_delay = (d_interp->ntaps() + 1) / 2;

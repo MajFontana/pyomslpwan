@@ -38,6 +38,8 @@
               pkgs.libxkbcommon
               pkgs.freetype
               pkgs.dbus
+
+              liquid-dsp
             ];
 
             LD_LIBRARY_PATH = with pkgs; lib.makeLibraryPath [

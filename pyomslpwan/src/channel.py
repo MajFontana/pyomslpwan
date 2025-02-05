@@ -4,7 +4,7 @@ import bitstring
 from pyomslpwan.lib.channel import *
 from pyomslpwan.src.structs import *
 from pyomslpwan.src.coding import *
-from pyomslpwan.lib.coding import toNrzArray
+from pyomslpwan.lib.coding import toNrzArray, binaryToNrz
 
 
 
@@ -54,6 +54,7 @@ class UplinkSyncwordSynchronizer(SyncwordSynchronizer):
         syncword_size = BurstModeUplink().syncword.getSize()
         syncword = Precoder().encode(numpy.array(bitstring.BitArray(uint=BurstModeUplink.SYNCWORD, length=syncword_size)))
         syncword_mod = UplinkMskModulator().modulate(syncword)
+        #syncword_mod = binaryToNrz(syncword)
         super().__init__(syncword=syncword_mod, syncword_offset=0, threshold=threshold)
 
 
@@ -68,6 +69,7 @@ class UplinkMidambleSynchronizer(SyncwordSynchronizer):
         midamble_size = BurstModeUplink().midamble.getSize()
         syncword = Precoder().encode(numpy.array(bitstring.BitArray(uint=BurstModeUplink.MIDAMBLE, length=midamble_size)))
         syncword_mod = UplinkMskModulator().modulate(syncword)
+        #syncword_mod = binaryToNrz(syncword)
         super().__init__(syncword=syncword_mod, syncword_offset=midamble_pos, threshold=threshold)
 
 

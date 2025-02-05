@@ -1,5 +1,4 @@
 import numpy
-import streamz
 
 from pyomslpwan.lib.coding import binaryToNrz
 
@@ -39,32 +38,6 @@ class Correlator:
 
 
 
-class StreamzCorrelator:
-
-    def __init__(self, pattern):
-        self.size = len(pattern)
-        self.buffer = None
-        self.pattern = pattern
-        self.pattern_rms = numpy.sqrt((numpy.abs(self.pattern) ** 2).sum())
-    
-    def correlate(self, window):
-        window_squared = numpy.abs(window) ** 2
-        window_rms = numpy.sqrt(window_squared.sum())
-
-        normalized_correlation = (window * self.pattern).sum() / (window_rms * self.pattern_rms)
-
-        return normalized_correlation
-    
-    def correlation(self, stream: streamz.Stream):
-        self.buffer = stream.sliding_window(self.size)
-        new_stream = self.buffer.map(self.correlate)
-        return new_stream
-    
-    def clear(self):
-        self.buffer._buffer.clear()
-
-
-
 class SyncwordSynchronizer:
 
     def __init__(self, syncword, syncword_offset, threshold):
@@ -98,8 +71,12 @@ class SyncwordSynchronizer:
     
     def feed(self, samples):
         correlation = self.correlator.correlate(samples)
+        from matplotlib import pyplot
+        #pyplot.plot(numpy.absolute(correlation))
+        #pyplot.show()
 
         sync_indices = numpy.argwhere(numpy.abs(correlation) > self.threshold)[:, 0]
+        #print(sync_indices)
         for index in sync_indices:
             sync_position = self.position + len(self.buffer) + index - (self.correlator.size - 1)
             start_position = sync_position - self.syncword_offset
@@ -154,19 +131,18 @@ class PrecodedMskDemodulator:
 
     def __init__(self, initial_phase, zero_clockwise):
         self.initial_phase = initial_phase
-        self.phase = self.initial_phase
         if zero_clockwise:
             self.phase_shift_coefficient = 1j
         else:
             self.phase_shift_coefficient = -1j
+        self.phase = self.initial_phase * self.phase_shift_coefficient
     
     def clear(self):
-        self.phase = self.initial_phase
+        self.phase = self.initial_phase * self.phase_shift_coefficient
 
     def demodulate(self, modulated):
-        phase_offset = self.phase * self.phase_shift_coefficient
-        phase = phase_offset * numpy.insert(numpy.cumprod(numpy.full(len(modulated) - 1, -self.phase_shift_coefficient)), 0, 1)
-        nrz = numpy.real(modulated / phase)
+        phase = self.phase * numpy.insert(numpy.cumprod(numpy.full(len(modulated), -self.phase_shift_coefficient)), 0, 1)
+        nrz = numpy.real(modulated / phase[:-1])
         self.phase = phase[-1]
         return nrz
 
@@ -196,60 +172,64 @@ class GaussianFilter:
         input_with_history = numpy.concatenate([self.state, upsampled])
         if padded:
             input_with_history = numpy.concatenate([input_with_history, numpy.zeros_like(self.state)])
-        self.state = input_with_history[:-len(self.kernel)]
+        self.state = input_with_history[-len(self.kernel):]
         filtered = numpy.convolve(input_with_history, self.kernel, "valid")
         return filtered
+    
+    def clear(self):
+        self.state = numpy.zeros(len(self.kernel) - 1)
 
 
 
 class IqFrequencyModulator:
 
-    def __init__(self):
+    def __init__(self, sensitivity):
         self.initial_phase = 0
+        self.sensitivity = sensitivity
 
     def modulate(self, argument):
-        argument = numpy.insert(argument, 0, self.initial_phase)
+        argument = numpy.insert(argument * self.sensitivity, 0, self.initial_phase)
         angle = numpy.cumsum(argument) % (2 * numpy.pi)
         iq = numpy.exp(1j * angle)
-        return iq
+        return iq[1:]
 
 
 
 class IqFrequencyDemodulator:
 
-    def __init__(self):
+    def __init__(self, sensitivity):
+        self.sensitivity = sensitivity
         self.previous_sample = 0
 
-    def modulate(self, iq):
+    def demodulate(self, iq):
         iq = numpy.insert(iq, 0, self.previous_sample)
         delta = iq[1:] * iq[:-1].conjugate()
-        angle = numpy.arctan2(delta.real, de)
-        return iq
+        angle = numpy.arctan2(delta.imag, delta.real)
+        angle /= self.sensitivity
+        return angle
 
 
 
-class GmskModulator:
+class GfskModulator:
 
-    def __init__(self, bandwidth_time_product, kernel_span, samples_per_symbol):
+    def __init__(self, bandwidth_time_product, kernel_span, samples_per_symbol, sensitivity):
         self.filter = GaussianFilter(bandwidth_time_product, kernel_span, samples_per_symbol)
-        self.sensitivity = (numpy.pi / 2) / sum(self.filter.kernel)
-        self.modulator = IqFrequencyModulator()
+        self.sensitivity = sensitivity / samples_per_symbol #/ numpy.sum(self.filter.kernel) 
+        self.modulator = IqFrequencyModulator(self.sensitivity)
     
     def modulate(self, bits, padded=False):
-        filtered = self.filter.filter(bits, padded) * self.sensitivity
+        nrz = binaryToNrz(bits)
+        filtered = self.filter.filter(nrz, padded)
         modulated = self.modulator.modulate(filtered)
         return modulated
-
-
-
-class FskDemodulator:
-
-    def __init__(self, bandwidth_time_product, kernel_span, samples_per_symbol):
-        self.filter = GaussianFilter(bandwidth_time_product, kernel_span, samples_per_symbol)
-        self.sensitivity = (numpy.pi / 2) / sum(self.filter.kernel)
-        self.modulator = IqFrequencyModulator()
     
-    def modulate(self, bits, padded=False):
-        filtered = self.filter.filter(bits, padded) * self.sensitivity
-        modulated = self.modulator.modulate(filtered)
-        return modulated
+    def clear(self):
+        self.filter.clear()
+
+
+
+class GmskModulator(GfskModulator):
+
+    def __init__(self, *args):
+        sensitivity = numpy.pi / 2
+        super().__init__(*args, sensitivity)

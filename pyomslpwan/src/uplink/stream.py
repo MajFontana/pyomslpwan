@@ -127,6 +127,7 @@ class UplinkReceiver:
                     yield None
                 samples = self.syncword_synchronizer.getBuffer()[syncword_start:syncword_end]
                 nrz = numpy.concatenate([nrz, self.syncword_demodulator.demodulate(samples)])
+                #print("Found syncword")
 
                 coded_length_start = syncword_end
                 coded_length_end = coded_length_start + burst.struct.coded_length.getSize()
@@ -137,6 +138,7 @@ class UplinkReceiver:
                 burst.struct.coded_length.setNrzStream(nrz[coded_length_start:coded_length_end])
 
                 self.parser.parseCodedLength(burst)
+                #print("Parsed coded length, Data A size:", burst.struct.data_a.getSize())
 
                 data_a_start = coded_length_end
                 data_a_end = data_a_start + burst.struct.data_a.getSize()
@@ -161,7 +163,9 @@ class UplinkReceiver:
                 nrz = numpy.concatenate([nrz, self.syncword_demodulator.demodulate(samples)])
                 burst.struct.coded_header.setNrzStream(nrz[coded_header_start:coded_header_end])
 
+                from pyomslpwan.lib.coding import nrzToBinary
                 self.parser.parseCodedHeader(burst)
+                #print("Parsed coded header")
 
                 data_b_start = coded_header_end
                 data_b_end = data_b_start + burst.struct.data_b.getSize()
@@ -172,6 +176,7 @@ class UplinkReceiver:
                 burst.struct.data_b.setNrzStream(nrz[data_b_start:data_b_end])
 
                 self.parser.parseData(burst)
+                #print("Parsed data")
 
                 yield burst
 
@@ -188,13 +193,12 @@ class UplinkReceiver:
                 self.midamble_demodulator.clear()
 
                 midamble_start = self.midamble_synchronizer.syncword_offset
-                print(midamble_start)
                 midamble_end = midamble_start + burst.struct.midamble.getSize()
                 while self.midamble_synchronizer.getSize() < midamble_end:
                     yield None
                 samples = self.midamble_synchronizer.getBuffer()[midamble_start:midamble_end]
                 nrz = numpy.concatenate([nrz, self.midamble_demodulator.demodulate(samples)])
-                print(nrz)
+                #print("Found midamble")
 
                 coded_header_start = midamble_end
                 coded_header_end = coded_header_start + burst.struct.coded_header.getSize()
@@ -202,10 +206,10 @@ class UplinkReceiver:
                     yield None
                 samples = self.midamble_synchronizer.getBuffer()[coded_header_start:coded_header_end]
                 nrz = numpy.concatenate([nrz, self.midamble_demodulator.demodulate(samples)])
-                print(nrz[coded_header_start:coded_header_end])
                 burst.struct.coded_header.setNrzStream(nrz[coded_header_start:coded_header_end])
 
                 self.parser.parseCodedHeader(burst)
+                #print("Parsed coded header")
 
                 beginning_size = burst.struct.syncword.getSize() + burst.struct.coded_length.getSize()
                 beginning_start = self.midamble_synchronizer.syncword_offset - burst.struct.data_a.getSize() - beginning_size
@@ -236,6 +240,7 @@ class UplinkReceiver:
                 burst.struct.data_b.setNrzStream(nrz[data_b_start:data_b_end])
 
                 self.parser.parseData(burst)
+                #print("Parsed data")
 
                 yield burst
 
@@ -254,6 +259,7 @@ class UplinkReceiver:
             self.bursts.append(burst)
     
     def clear(self):
+        self.bursts = []
         self.syncword_parser_loop = self.syncwordParserLoop()
         self.midamble_parser_loop = self.midambleParserLoop()
         self.syncword_synchronizer.clear()
@@ -261,36 +267,37 @@ class UplinkReceiver:
 
 
 
-frame = UplinkFrame()
-frame.coded_payload.phy_payload = b"Hello world!"
-frame.coded_header.timing_input_value = 64
-frame.coded_header.burst_mode = BURST_MODE_SINGLE_BURST
-frame.coded_header.burst_type = BURST_TYPE_UPLINK_SINGLE_BURST_FEC_RATE_1_3
-BurstModeUplinkGenerator().generateFrame(frame)
-bitstream = frame.uplink_0.bitstream
-print(frame.uplink_0.struct.getPosition(frame.uplink_0.struct.midamble) + 100)
+if __name__ == "__main__":
+    frame = UplinkFrame()
+    frame.coded_payload.phy_payload = b"Hello world!"
+    frame.coded_header.timing_input_value = 64
+    frame.coded_header.burst_mode = BURST_MODE_SINGLE_BURST
+    frame.coded_header.burst_type = BURST_TYPE_UPLINK_SINGLE_BURST_FEC_RATE_1_3
+    BurstModeUplinkGenerator().generateFrame(frame)
+    bitstream = frame.uplink_0.bitstream
+    print(frame.uplink_0.struct.getPosition(frame.uplink_0.struct.midamble) + 100)
 
-mod = UplinkMskModulator().modulate(bitstream)
+    mod = UplinkMskModulator().modulate(bitstream)
 
-noise = numpy.zeros(len(mod) + 200, dtype=complex)#complexNoise(noiseDeviation(0), len(mod) + 200)
-chn = noise
-chn[100:len(mod) + 100] += mod
+    noise = numpy.zeros(len(mod) + 200, dtype=complex)#complexNoise(noiseDeviation(0), len(mod) + 200)
+    chn = noise
+    chn[100:len(mod) + 100] += mod
 
-rec = UplinkReceiver(1, 0.5)
-rec.feed(chn)
-for burst in rec.bursts:
-    if burst.coded_header.burst_mode == BURST_MODE_SINGLE_BURST and frame.coded_header.burst_type == BURST_TYPE_UPLINK_SINGLE_BURST_FEC_RATE_1_3:
+    rec = UplinkReceiver(1, 0.5)
+    rec.feed(chn)
+    for burst in rec.bursts:
+        if burst.coded_header.burst_mode == BURST_MODE_SINGLE_BURST and frame.coded_header.burst_type == BURST_TYPE_UPLINK_SINGLE_BURST_FEC_RATE_1_3:
+            frame = UplinkFrame()
+            frame.uplink_0 = burst
+            BurstModeUplinkParser().parseFrame(frame)
+            print(frame.coded_payload.phy_payload)
+
+    """
+    par = BitstreamParser()
+    burst = par.parseBitstream(UplinkPrecodedMskDemodulator().demodulate(mod), frame.uplink_0.struct.getPosition(frame.uplink_0.struct.coded_header))
+    if burst != None:
         frame = UplinkFrame()
         frame.uplink_0 = burst
         BurstModeUplinkParser().parseFrame(frame)
         print(frame.coded_payload.phy_payload)
-
-"""
-par = BitstreamParser()
-burst = par.parseBitstream(UplinkPrecodedMskDemodulator().demodulate(mod), frame.uplink_0.struct.getPosition(frame.uplink_0.struct.coded_header))
-if burst != None:
-    frame = UplinkFrame()
-    frame.uplink_0 = burst
-    BurstModeUplinkParser().parseFrame(frame)
-    print(frame.coded_payload.phy_payload)
-"""
+    """

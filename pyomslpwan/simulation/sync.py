@@ -1,15 +1,21 @@
 import numpy
+import math
 from scipy import signal
 from matplotlib import pyplot
+import jellyfish
 
 import matplotlib
 matplotlib.use("tkagg")
+
+from pyomslpwan.lib.synchronization import *
+
+
 
 if __name__ == "__main__":
     from pyomslpwan.src.uplink.frame import BurstModeUplinkGenerator
     from pyomslpwan.src.uplink.pdu import UplinkFrame
     from pyomslpwan.src.structs import *
-    from pyomslpwan.lib.channel import GmskModulator, IqFrequencyDemodulator
+    from pyomslpwan.lib.channel import GmskModulator, IqFrequencyModulator, IqFrequencyDemodulator
     from pyomslpwan.lib.coding import binaryToNrz
 
     seed = 0
@@ -24,62 +30,48 @@ if __name__ == "__main__":
 
     numpy.random.seed(0)
 
+    demodulator = GmskDemod(sps, 0.175, 0.005, 0)
+
     frame = UplinkFrame()
     frame.coded_header.burst_mode = burst_mode
     frame.coded_header.burst_type = burst_type = 0
     frame.coded_header.timing_input_value = numpy.random.randint(0, 128)
     frame.coded_payload.phy_payload = numpy.random.randint(0, 256, size,  dtype=numpy.uint8).tobytes()
     BurstModeUplinkGenerator().generateFrame(frame)
-    bitstream = frame.uplink_0.bitstream
+    bitstream = frame.uplink_0.bitstream#[:64]
     nrz = binaryToNrz(bitstream)
     print(f"Bitstream size: {len(nrz)}")
 
     modulated = GmskModulator(bt, span, sps).modulate(nrz, padded=True).astype(numpy.complex64)
     print(f"Modulated size: {len(modulated)}")
     
-    #off = 0.2
-    #t = numpy.linspace(0, len(nrz), len(modulated))
-    #osc = numpy.sin(off * 2 * numpy.pi * t) + 1j * numpy.cos(off * 2 * numpy.pi * t)
-    #shifted = modulated * osc
+    t = numpy.linspace(0, len(nrz), len(modulated))
+    a = (20 / 125) / sps
+    f = (0.2/125) / (2 * numpy.pi) / sps
+    off = a *  numpy.sin(f * 2 * numpy.pi * t)
+    osc = IqFrequencyModulator().modulate(2 * numpy.pi * off)
+    shifted = modulated * osc
 
-    demod = IqFrequencyDemodulator().demodulate(modulated)
-    pyplot.plot(demod[40 * 8:80 * 8])
+    #demod = IqFrequencyDemodulator().demodulate(modulated)
+    #pyplot.plot(demod[40 * 8:80 * 8])
+    #pyplot.show()
+
+    #print("".join(map(str, bitstream.astype(int))))
+    #samp_rate = baud * spsprint("".join(map(str, bitstream.astype(int))))
+    #resamp = signal.resample_poly(demod, interp, 1)
+    #print(f"Resampled size: {len(resamp)} ({len(resamp) / len(demod)})")
+
+    demod, synced, data = demodulator.demodulate(shifted)
+    pyplot.plot(demod)
+    pyplot.show()
+    pyplot.plot(synced)
+    pyplot.show()
+    pyplot.plot(numpy.array(demodulator.clock_recovery.error))
     pyplot.show()
 
-    samp_rate = baud * sps
+    bin_in = "".join(map(str, bitstream.astype(int)))
+    bin_out = "".join(map(str, data.astype(int)))
 
-    resamp = signal.resample_poly(demod, interp, 1)
-    print(f"Resampled size: {len(resamp)} ({len(resamp) / len(demod)})")
-
-    prev_sample = 0
-    prev_decision = 0
-
-    avg_period = 0
-    phase = 0
-
-    for i in range(len(resamp)):
-        sample = resamp[i]
-        decision = sample > 0
-
-        error = decision * prev_sample - prev_decision * sample
-
-        avg_period = avg_period + beta * error
-        inst_period = avg_period + alpha * error
-        if inst_period <= 0:
-            inst_period = avg_period
-        phase = (phase + inst_period) % (2 * numpy.pi)
-
-        prev_sample = sample
-        prev_decision = decision
-
-    resamp_delay = resamp[:-interp * sps]
-    resamp_now = resamp[interp * sps:]
-    
-    decision = resamp > 0
-    decision_delay = decision[  :-interp * sps]
-    decision_now = decision[interp * sps:]
-    
-    error = resamp_now * decision_delay - decision_now * resamp_delay
-
-    pyplot.plot(error[:8 * 128 * 16])
-    pyplot.show()
+    print(bin_in)
+    print(bin_out)
+    print(jellyfish.levenshtein_distance(bin_in, bin_out))
