@@ -40,6 +40,12 @@
               pkgs.dbus
 
               liquid-dsp
+              cmake
+              pkg-config
+            ];
+
+            buildInputs = with pkgs; [
+              liquid-dsp
             ];
 
             LD_LIBRARY_PATH = with pkgs; lib.makeLibraryPath [
