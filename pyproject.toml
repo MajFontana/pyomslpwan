@@ -25,6 +25,9 @@ dependencies = ["matplotlib",
                 "streamz",
                 "RsWaveform"]
 
+[tool.setuptools.packages.find]
+include = ["pyomslpwan"]
+
 [project.urls]
 #Homepage = "https://github.com/pypa/sampleproject"
 #Issues = "https://github.com/pypa/sampleproject/issues"
