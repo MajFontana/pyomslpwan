@@ -1,4 +1,6 @@
 *.iq.tar
+*.m
+*.o
 liquid-dsp/
 
 # https://github.com/github/gitignore/blob/main/Python.gitignore
