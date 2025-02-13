@@ -166,10 +166,21 @@ class PulseUpsampler:
 
 
 
+class RectUpsampler:
+
+    def __init__(self, interpolation):
+        self.interpolation = interpolation
+
+    def upsample(self, samples):
+        rects = numpy.repeat(samples, self.interpolation) / self.interpolation
+        return rects
+
+
+
 class GaussianFilter:
 
     def __init__(self, bandwidth_time_product, kernel_span, samples_per_symbol):
-        self.upsampler = PulseUpsampler(samples_per_symbol)
+        self.upsampler = RectUpsampler(samples_per_symbol)
         self.kernel = gaussdesign(bandwidth_time_product, kernel_span, samples_per_symbol)
         self.state = numpy.zeros(len(self.kernel) - 1)
     
