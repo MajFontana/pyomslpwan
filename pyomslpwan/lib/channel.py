@@ -11,7 +11,8 @@ NUMBA_PARAMS = dict(cache=True)
 
 
 def gaussdesign(bt, span, sps):
-    n = span * sps
+    n = int((span - 1) * sps) + 1
+    #n = span * sps
     t_range = (n - 1) / sps / 2
     t = numpy.linspace(-t_range, t_range, n)
     delta = numpy.sqrt(numpy.log(2)) / (2 * numpy.pi * bt)
