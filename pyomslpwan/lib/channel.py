@@ -369,8 +369,7 @@ class GMSKSynchronizer:
     
     def synchronize(self, iq_samples):
         self.interp_buffer.append(1j)
-        self.freq, self.phase, self.timing_error, self.mu, self.prev_sample, f_error, p_error, f_correct, a1, a2, output =\
-        output = _synchronize(
+        self.freq, self.phase, self.timing_error, self.mu, self.prev_sample, f_error, p_error, f_correct, a1, a2, output = _synchronize(
             self.phase,
             self.freq,
             self.alpha_freq,
