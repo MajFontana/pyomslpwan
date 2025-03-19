@@ -576,7 +576,7 @@ class GmskPhaseRecovery:
 class GmskSync:
 
     def __init__(self):
-        int_wins_i = [for shift in range(K_b)]
+        #int_wins_i = [for shift in range(K_b)]
         int_wins_q = []
         K_b = 6
         for shift in range(K_b):
