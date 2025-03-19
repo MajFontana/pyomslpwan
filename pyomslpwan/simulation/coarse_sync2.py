@@ -501,12 +501,128 @@ pyplot.scatter(sync.real, sync.imag)
 pyplot.show()
 """
 
+# https://hal.science/hal-01514643/document
+class GmskPhaseRecovery2:
 
-C_K = constructLaurentPulsesGmsk(BT, L, SPS)
-f = signal.lfilter(channel, C_K[0][::-1])
-pyplot.plot(f.real)
-pyplot.plot(f.imag)
+    def __init__(self, BT, L, SPS, bandwidth):
+        self.C0 = constructLaurentPulsesGmsk(BT, L, SPS)[0]
+        self.window = [0 for _ in range(16)]
+        self.phase = 0
+
+    def process(self, samples):
+        filtered = signal.lfilter(self.C0[::-1], 1, samples) / SPS
+        #filtered *= numpy.exp(1j * numpy.pi / 4)
+        sampled = filtered[::SPS]
+        sampled_prev = sampled[:-1]
+        sampled = sampled[1:]
+        output_corrected = []
+        output_error = []
+        
+        coef = 1
+        for orig, sample, sample_prev in zip(samples[1::SPS], sampled, sampled_prev):
+            reference = numpy.exp(1j * self.phase)
+            corrected = sample * reference.conj()
+            corrected_prev = sample_prev * reference.conj()
+            error = coef * (corrected.real * corrected.imag - corrected_prev.real * corrected_prev.imag)
+            coef *= -1
+
+            self.window.pop(0)
+            self.window.append(error)
+            smooth = numpy.average(self.window)
+
+            self.phase += smooth * 0.001
+
+            output_corrected.append(orig)# * reference.conj())#smooth)
+            output_error.append(self.phase % (2 * numpy.pi))
+        
+        return numpy.array(output_corrected), numpy.array(output_error)
+
+# https://hal.science/hal-01514643/document
+class GmskPhaseRecovery:
+
+    def __init__(self, BT, L, SPS, bandwidth):
+        det_gain = 2 * numpy.pi * SAMP_RATE
+        self.C0 = constructLaurentPulsesGmsk(BT, L, SPS)[0]
+        self.nco = Nco(SAMP_RATE)
+        self.loop_filter = PiFilter.constructForLoopFilter(SAMP_RATE, bandwidth, detector_gain=det_gain)
+        self.frequency = 0
+
+    def process(self, samples):
+        filtered = signal.lfilter(self.C0[::-1], 1, samples) / SPS
+        filtered *= numpy.exp(1j * numpy.pi / 4)
+        sampled = filtered[::SPS]
+        sampled_prev = sampled[:-1:]
+        sampled = sampled[1::]
+        output_corrected = []
+        output_error = []
+        
+        coef = 1
+        for sample, sample_prev in zip(sampled, sampled_prev):
+            reference = self.nco.iteration(self.frequency)
+            corrected = sample * reference.conj()
+            corrected_prev = sample_prev * reference.conj()
+            error = coef * (corrected.real * corrected.imag - corrected_prev.real * corrected_prev.imag)
+            coef *= -1
+            self.frequency = self.loop_filter.iteration(error)
+            output_corrected.append(error)
+            output_error.append(self.frequency)
+        #output_error /= numpy.max(numpy.abs(output_error))
+        
+        return numpy.array(output_corrected), numpy.array(output_error)
+
+
+
+# https://descanso.jpl.nasa.gov/monograph/series3/complete1.pdf
+class GmskSync:
+
+    def __init__(self):
+        int_wins_i = [for shift in range(K_b)]
+        int_wins_q = []
+        K_b = 6
+        for shift in range(K_b):
+            pass
+            
+
+
+
+squared = channel ** 2
+a = 0.1
+bandpass_1 = design_complex_bpf(-2 * dev * (1 + a), -2 * dev * (1 - a), 2 * dev* a, SPS)
+bandpass_2 = design_complex_bpf(2 * dev * (1 - a), 2 * dev * (1 + a), 2 * dev * a, SPS)
+peak_1 = signal.lfilter(bandpass_1, 1, squared)
+peak_2 = signal.lfilter(bandpass_2, 1, squared)
+
+nco1, err1 = PLL(damping_factor=0.707, loop_bandwidth=1.2, sample_interval=1 / SPS, initial_freq=2 * angdev, ratio=0.25).process_samples(peak_1)
+nco2, err2 = PLL(damping_factor=0.707, loop_bandwidth=1.2, sample_interval=1 / SPS, initial_freq=-2 * angdev, ratio=0.25).process_samples(peak_2)
+
+diff = nco2 * nco1
+channel *= diff.conj()
+
+pyplot.plot(numpy.gradient(numpy.unwrap(numpy.angle(diff))))
+pyplot.plot(numpy.gradient(numpy.unwrap(numpy.angle(channel))))
 pyplot.show()
+
+
+
+rec = GmskPhaseRecovery2(BT, L, SPS, 100)
+out, err = rec.process(channel)
+
+pyplot.plot(numpy.repeat(numpy.gradient(numpy.unwrap(numpy.angle(out))), SPS))
+pyplot.show()
+
+#out = out[100 * SPS:6000 * SPS]
+#pyplot.scatter(out.real, out.imag)
+#pyplot.show()
+
+ax1 = pyplot.gca()
+ax2 = ax1.twinx()
+ax1.plot(out.real)
+ax1.plot(out.imag)
+ax2.plot(err, color="green")
+pyplot.show()
+
+
+
 
 """
 squared = channel ** 2
