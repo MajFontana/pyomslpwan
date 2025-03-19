@@ -78,7 +78,7 @@ Doing so, however, you will have to update the package whenever a change is made
 
 ## Testing
 
-You can verify that pyomslpwan passes test vectors defined in the OMS LPWAN speicifcation by running
+You can verify that pyomslpwan passes test vectors defined in the OMS LPWAN specification by running
 
 ```bash
 python -m unittest -v
