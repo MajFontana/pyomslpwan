@@ -28,7 +28,13 @@ Bitstream generator and parser for OMS LPWAN frames, in progress toward a fully 
 
 ### With Nix
 
-If you're using Nix, you can enter the development environment by running `nix develop` in the root directory. This will set up non-Python dependencies and also enter a venv (and create one if necessary).
+If you're using Nix with flakes, you can enter the development environment by running
+
+```
+nix develop
+```
+
+in the project root directory. This will set up non-Python dependencies and also enter a venv (and create one if necessary).
 
 > **Note:** If using Nix, you might need to add the following to the beginning of the script you're running for matplotlib to work:
 ```Python
